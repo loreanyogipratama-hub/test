@@ -1,0 +1,73 @@
+ame: Build kernel MI9 (cepheus) + KernelSU Next
+ 
+on:
+  workflow_dispatch:
+    inputs:
+      ksu_ref:
+        description: "Tag/branch setup.sh KernelSU Next"
+        default: "v1.0.8"
+      defconfig:
+        description: "Defconfig (cek di arch/arm64/configs/)"
+        default: "cepheus_defconfig"
+ 
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Install dependensi
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison flex libssl-dev libelf-dev ccache \
+            python3 zip git curl device-tree-compiler lz4 cpio
+ 
+      - name: Clone kernel (shallow)
+        run: |
+          git clone --depth=1 -b CAF-10 \
+            https://github.com/shandongtlb/kernel_xiaomi_sm8150_MI9 kernel
+ 
+      - name: Clone toolchain
+        run: |
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang clang
+          echo "$PWD/clang/bin" >> $GITHUB_PATH
+ 
+      - name: Integrasi KernelSU Next
+        working-directory: kernel
+        run: |
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" \
+            | bash -s ${{ inputs.ksu_ref }}
+          # Kernel 4.14 (non-GKI): pastikan hook terpasang. Kalau setup.sh
+          # tidak memasangnya otomatis, patch manual hooks harus ditambahkan
+          # (lihat dokumentasi KernelSU Next untuk non-GKI).
+ 
+      - name: Aktifkan config yang dibutuhkan
+        working-directory: kernel
+        run: |
+          make O=out ARCH=arm64 ${{ inputs.defconfig }}
+          scripts/config --file out/.config \
+            -e KSU -e KPROBES -e HAVE_KPROBES -e KPROBE_EVENTS \
+            -e OVERLAY_FS -e MODULES
+          make O=out ARCH=arm64 olddefconfig
+ 
+      - name: Build
+        working-directory: kernel
+        run: |
+          make -j$(nproc) O=out ARCH=arm64 \
+            CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm \
+            OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- 2>&1 | tee build.log
+ 
+      - name: Paketkan AnyKernel3
+        working-directory: kernel
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 ak3
+          cp out/arch/arm64/boot/Image.gz-dtb ak3/ 2>/dev/null || \
+            cp out/arch/arm64/boot/Image.gz ak3/
+          cd ak3 && zip -r9 ../cepheus-ksunext-${{ inputs.ksu_ref }}.zip . -x '.git*'
+ 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cepheus-ksunext
+          path: |
+            kernel/cepheus-ksunext-*.zip
+            kernel/build.log
