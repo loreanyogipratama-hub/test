@@ -50,12 +50,21 @@ jobs:
  
       - name: Build
         working-directory: kernel
+        shell: bash -eo pipefail {0}
         run: |
           make -j$(nproc) O=out ARCH=arm64 \
             CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm \
             OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- 2>&1 | tee build.log
+ 
+      - name: Tampilkan error build
+        if: failure()
+        working-directory: kernel
+        run: |
+          grep -nE "error|Error|\*\*\*" build.log | head -40
+          echo "----- 60 baris terakhir -----"
+          tail -60 build.log
  
       - name: Paketkan AnyKernel3
         working-directory: kernel
