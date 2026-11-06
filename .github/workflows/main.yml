@@ -1,5 +1,5 @@
 name: Build kernel MI9 (cepheus) + KernelSU Next
- 
+
 on:
   workflow_dispatch:
     inputs:
@@ -9,7 +9,7 @@ on:
       defconfig:
         description: "Defconfig (cek di arch/arm64/configs/)"
         default: "cepheus_defconfig"
- 
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -21,17 +21,17 @@ jobs:
             python3 zip git curl device-tree-compiler lz4 cpio \
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
             gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi
- 
+
       - name: Clone kernel (shallow)
         run: |
           git clone --depth=1 -b CAF-10 \
             https://github.com/shandongtlb/kernel_xiaomi_sm8150_MI9 kernel
- 
+
       - name: Clone toolchain
         run: |
           git clone --depth=1 https://github.com/kdrag0n/proton-clang clang
           echo "$PWD/clang/bin" >> $GITHUB_PATH
- 
+
       - name: Integrasi KernelSU Next
         working-directory: kernel
         run: |
@@ -40,16 +40,16 @@ jobs:
           # Kernel 4.14 (non-GKI): pastikan hook terpasang. Kalau setup.sh
           # tidak memasangnya otomatis, patch manual hooks harus ditambahkan
           # (lihat dokumentasi KernelSU Next untuk non-GKI).
- 
+
       - name: Aktifkan config yang dibutuhkan
         working-directory: kernel
         run: |
           make O=out ARCH=arm64 ${{ inputs.defconfig }}
           scripts/config --file out/.config \
             -e KSU -e KPROBES -e HAVE_KPROBES -e KPROBE_EVENTS \
-            -e OVERLAY_FS -e MODULES
+            -e OVERLAY_FS -e MODULES -d COMPAT_VDSO
           make O=out ARCH=arm64 olddefconfig
- 
+
       - name: Build
         working-directory: kernel
         shell: bash -eo pipefail {0}
@@ -58,8 +58,9 @@ jobs:
             CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm \
             OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            CROSS_COMPILE_ARM32=arm-linux-gnueabi- 2>&1 | tee build.log
- 
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi- 2>&1 | tee build.log
+
       - name: Tampilkan error build
         if: failure()
         working-directory: kernel
@@ -67,7 +68,7 @@ jobs:
           grep -nE "error|Error|\*\*\*" build.log | head -40
           echo "----- 60 baris terakhir -----"
           tail -60 build.log
- 
+
       - name: Paketkan AnyKernel3
         working-directory: kernel
         run: |
@@ -75,7 +76,7 @@ jobs:
           cp out/arch/arm64/boot/Image.gz-dtb ak3/ 2>/dev/null || \
             cp out/arch/arm64/boot/Image.gz ak3/
           cd ak3 && zip -r9 ../cepheus-ksunext-${{ inputs.ksu_ref }}.zip . -x '.git*'
- 
+
       - uses: actions/upload-artifact@v4
         with:
           name: cepheus-ksunext
