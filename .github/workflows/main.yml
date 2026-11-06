@@ -18,7 +18,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y bc bison flex libssl-dev libelf-dev ccache \
-            python3 zip git curl device-tree-compiler lz4 cpio
+            python3 zip git curl device-tree-compiler lz4 cpio \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            gcc-arm-linux-gnueabi binutils-arm-linux-gnueabi
  
       - name: Clone kernel (shallow)
         run: |
