@@ -47,19 +47,30 @@ jobs:
           make O=out ARCH=arm64 ${{ inputs.defconfig }}
           scripts/config --file out/.config \
             -e KSU -e KPROBES -e HAVE_KPROBES -e KPROBE_EVENTS \
-            -e OVERLAY_FS -e MODULES -d COMPAT_VDSO
+            -e OVERLAY_FS -e MODULES \
+            -d COMPAT_VDSO
           make O=out ARCH=arm64 olddefconfig
 
       - name: Build
         working-directory: kernel
         shell: bash -eo pipefail {0}
         run: |
-          make -j$(nproc) O=out ARCH=arm64 \
+          MK="make -j$(nproc) O=out ARCH=arm64 \
             CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm \
             OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-            CROSS_COMPILE_COMPAT=arm-linux-gnueabi- 2>&1 | tee build.log
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-"
+          # 1) Kernel image tanpa dtb
+          $MK Image.gz 2>&1 | tee build.log
+          # 2) Device tree: -k = lanjut walau overlay dtbo cepheus gagal
+          $MK -k dtbs 2>&1 | tee -a build.log || true
+          echo "----- 12 baris awal cepheus-pinctrl.dtsi -----"
+          cat -A arch/arm64/boot/dts/qcom/cepheus-pinctrl.dtsi | head -n 12
+          ls out/arch/arm64/boot/dts/qcom/*.dtb
+          # 3) Rakit Image.gz-dtb manual dari dtb utama
+          cat out/arch/arm64/boot/Image.gz out/arch/arm64/boot/dts/qcom/*.dtb \
+            > out/arch/arm64/boot/Image.gz-dtb
 
       - name: Tampilkan error build
         if: failure()
